@@ -107,9 +107,9 @@ class ActivationWorker(QThread):
 
             # Clear existing keys
             self.status_updated.emit("Clearing existing product keys...")
-            self.run_command("cscript //nologo slmgr.vbs /ckms")
-            self.run_command("cscript //nologo slmgr.vbs /upk")
-            self.run_command("cscript //nologo slmgr.vbs /cpky")
+            self.run_command("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ckms")
+            self.run_command("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /upk")
+            self.run_command("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /cpky")
             self.progress_updated.emit(30)
 
             # Install product key
@@ -147,7 +147,7 @@ class ActivationWorker(QThread):
                 return False
             try:
                 self.status_updated.emit(f"🔑 Trying product key {i+1}/{len(keys)} for {self.windows_version}...")
-                result = self.run_command(f"cscript //nologo slmgr.vbs /ipk {key}")
+                result = self.run_command(f"cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ipk {key}")
 
                 if result:
                     # Check for success indicators
@@ -156,6 +156,7 @@ class ActivationWorker(QThread):
                         return True
                     elif "access denied" in result.lower():
                         self.status_updated.emit("❌ Access denied - Please run as Administrator")
+                        self.status_updated.emit("💡 Tip: Right-click the application and select 'Run as administrator'")
                         return False
                     elif "invalid" in result.lower():
                         self.status_updated.emit(f"⚠️ Key {i+1} invalid, trying next...")
@@ -184,10 +185,10 @@ class ActivationWorker(QThread):
                 self.status_updated.emit(f"Trying KMS server {i+1}/{len(self.kms_servers)}...")
 
                 # Set KMS server
-                self.run_command(f"cscript //nologo slmgr.vbs /skms {server}:1688")
+                self.run_command(f"cscript //nologo C:\\Windows\\System32\\slmgr.vbs /skms {server}:1688")
 
                 # Attempt activation
-                result = self.run_command("cscript //nologo slmgr.vbs /ato")
+                result = self.run_command("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /ato")
 
                 if result and "successfully" in result.lower():
                     return True
@@ -298,6 +299,7 @@ class WindowsActivatorGUI(QMainWindow):
 
         # Create all sections with enhanced content
         self.create_header(main_layout)
+        self.create_admin_status_panel(main_layout)
         self.create_quick_info_panel(main_layout)
         self.create_tabs_section(main_layout)
         self.create_main_control_panel(main_layout)
@@ -333,6 +335,74 @@ class WindowsActivatorGUI(QMainWindow):
         header_card.layout().addLayout(header_layout)
 
         layout.addWidget(header_card)
+
+    def create_admin_status_panel(self, layout):
+        """Create admin status warning panel"""
+        admin_content = QWidget()
+        admin_layout = QHBoxLayout(admin_content)
+        admin_layout.setSpacing(15)
+
+        # Check admin status
+        is_admin = self.is_admin()
+
+        if is_admin:
+            status_icon = QLabel("✅")
+            status_text = QLabel("Running as Administrator")
+            status_text.setObjectName("AdminStatusGood")
+            restart_btn = None
+        else:
+            status_icon = QLabel("⚠️")
+            status_text = QLabel("NOT running as Administrator - Some features may not work")
+            status_text.setObjectName("AdminStatusWarning")
+            restart_btn = ModernButton("🔄 Restart as Admin", "primary")
+            restart_btn.clicked.connect(self.restart_as_admin)
+
+        status_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        status_text.setWordWrap(True)
+
+        admin_layout.addWidget(status_icon)
+        admin_layout.addWidget(status_text, 1)
+
+        if restart_btn:
+            admin_layout.addWidget(restart_btn)
+
+        admin_card = ModernCard("🛡️ Administrator Status", admin_content)
+        if not is_admin:
+            admin_card.setObjectName("WarningCard")
+
+        layout.addWidget(admin_card)
+
+    def is_admin(self):
+        """Check if running as administrator"""
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
+
+    def restart_as_admin(self):
+        """Restart application as administrator"""
+        try:
+            import sys
+            if sys.platform == "win32":
+                # Get the full path to the current script
+                script_path = os.path.abspath(sys.argv[0])
+                self.log_message("🔄 Restarting with administrator privileges...")
+
+                result = ctypes.windll.shell32.ShellExecuteW(
+                    None, "runas", sys.executable, f'"{script_path}"', None, 1
+                )
+
+                if result > 32:  # Success
+                    self.log_message("✅ Successfully initiated admin restart")
+                    QApplication.quit()
+                else:
+                    self.log_message(f"❌ Failed to restart as admin (error code: {result})")
+                    QMessageBox.warning(self, "Error", "Failed to restart as administrator. Please try manually.")
+            else:
+                QMessageBox.warning(self, "Error", "Admin restart is only supported on Windows.")
+        except Exception as e:
+            self.log_message(f"❌ Exception during admin restart: {str(e)}")
+            QMessageBox.warning(self, "Error", f"Failed to restart as administrator: {str(e)}")
 
     def create_quick_info_panel(self, layout):
         """Create quick information panel with system stats"""
@@ -595,6 +665,9 @@ class WindowsActivatorGUI(QMainWindow):
         self.check_status_btn = ModernButton("📊 Check Status", "secondary")
         self.check_status_btn.clicked.connect(self.check_activation_status)
 
+        self.test_btn = ModernButton("🧪 Test Commands", "secondary")
+        self.test_btn.clicked.connect(self.test_activation_commands)
+
         self.stop_btn = ModernButton("⏹️ Stop Process", "danger")
         self.stop_btn.clicked.connect(self.stop_activation)
         self.stop_btn.setEnabled(False)
@@ -605,6 +678,7 @@ class WindowsActivatorGUI(QMainWindow):
 
         control_layout.addWidget(self.activate_btn, 2)  # Takes more space
         control_layout.addWidget(self.check_status_btn, 1)
+        control_layout.addWidget(self.test_btn, 1)
         control_layout.addWidget(quick_check_btn, 1)
         control_layout.addWidget(self.stop_btn, 1)
 
@@ -714,11 +788,15 @@ class WindowsActivatorGUI(QMainWindow):
         save_log_btn = ModernButton("💾 Save Log", "secondary")
         save_log_btn.clicked.connect(self.save_log)
 
+        copy_log_btn = ModernButton("📋 Copy Log", "secondary")
+        copy_log_btn.clicked.connect(self.copy_log)
+
         export_log_btn = ModernButton("📤 Export Log", "secondary")
         export_log_btn.clicked.connect(self.export_log)
 
         log_controls.addWidget(clear_log_btn)
         log_controls.addWidget(save_log_btn)
+        log_controls.addWidget(copy_log_btn)
         log_controls.addWidget(export_log_btn)
         log_controls.addStretch()
 
@@ -1293,6 +1371,21 @@ class WindowsActivatorGUI(QMainWindow):
             color: #89b4fa;
         }
 
+        /* Admin Status */
+        QLabel#AdminStatusGood {
+            color: #a6e3a1;
+            font-weight: bold;
+        }
+
+        QLabel#AdminStatusWarning {
+            color: #fab387;
+            font-weight: bold;
+        }
+
+        QFrame#WarningCard {
+            border: 2px solid #fab387;
+        }
+
         QLabel#BuildLabel {
             font-size: 11px;
             color: #585b70;
@@ -1406,6 +1499,17 @@ class WindowsActivatorGUI(QMainWindow):
             QMessageBox.information(self, "Log Saved", f"Log saved to {filename}")
         except Exception as e:
             self.log_message(f"❌ Failed to save log: {str(e)}")
+
+    def copy_log(self):
+        """Copy log to clipboard"""
+        try:
+            clipboard = QApplication.clipboard()
+            log_text = self.log_text.toPlainText()
+            clipboard.setText(log_text)
+            self.log_message("📋 Log copied to clipboard")
+            QMessageBox.information(self, "Log Copied", "Log has been copied to clipboard")
+        except Exception as e:
+            self.log_message(f"❌ Failed to copy log: {str(e)}")
 
     def export_log(self):
         """Export log with detailed information"""
@@ -1725,7 +1829,7 @@ End of Report
     def check_activation_status_silent(self):
         """Check activation status without user interaction"""
         try:
-            result = subprocess.run("cscript //nologo slmgr.vbs /xpr",
+            result = subprocess.run("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /xpr",
                                   shell=True, capture_output=True, text=True, timeout=10)
 
             if "permanently activated" in result.stdout.lower():
@@ -1761,7 +1865,7 @@ End of Report
         """Check and display activation status"""
         try:
             self.log_message("🔍 Checking activation status...")
-            result = subprocess.run("cscript //nologo slmgr.vbs /dlv",
+            result = subprocess.run("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /dlv",
                                   shell=True, capture_output=True, text=True, timeout=15)
 
             if result.stdout:
@@ -1776,6 +1880,43 @@ End of Report
         except Exception as e:
             QMessageBox.critical(self, "Error", f"Error checking activation status: {str(e)}")
 
+    def test_activation_commands(self):
+        """Test if activation commands work properly"""
+        self.log_message("🧪 Testing activation commands...")
+
+        try:
+            # Test basic slmgr command
+            result = subprocess.run("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /?",
+                                  shell=True, capture_output=True, text=True, timeout=10)
+
+            if result.returncode == 0:
+                self.log_message("✅ slmgr.vbs is available and working")
+
+                # Test getting current license info
+                result2 = subprocess.run("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /dli",
+                                       shell=True, capture_output=True, text=True, timeout=15)
+
+                if result2.stdout:
+                    self.log_message("✅ License information retrieved successfully")
+                    self.log_message(f"Current license info: {result2.stdout[:200]}...")
+                else:
+                    self.log_message("⚠️ Could not retrieve license information")
+
+                # Check admin privileges
+                if self.is_admin():
+                    self.log_message("✅ Running with administrator privileges")
+                else:
+                    self.log_message("❌ NOT running with administrator privileges - this will cause issues")
+
+            else:
+                self.log_message(f"❌ slmgr.vbs test failed with return code: {result.returncode}")
+                self.log_message(f"Error output: {result.stderr}")
+
+        except subprocess.TimeoutExpired:
+            self.log_message("⚠️ Command test timed out")
+        except Exception as e:
+            self.log_message(f"❌ Error testing commands: {str(e)}")
+
     def start_activation(self):
         """Start the Windows activation process"""
         if self.worker and self.worker.isRunning():
@@ -1789,6 +1930,23 @@ End of Report
 
         if reply != QMessageBox.StandardButton.Yes:
             return
+
+        # Check admin privileges upfront
+        if not self.is_admin():
+            admin_reply = QMessageBox.question(self, "Admin Rights Required",
+                                             "Administrator privileges are required for Windows activation.\n\n"
+                                             "Would you like to restart the application with admin rights now?",
+                                             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            if admin_reply == QMessageBox.StandardButton.Yes:
+                self.restart_as_admin()
+                return
+            else:
+                proceed_reply = QMessageBox.question(self, "Continue Anyway?",
+                                                   "Activation will likely fail without admin rights.\n\n"
+                                                   "Continue anyway?",
+                                                   QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if proceed_reply != QMessageBox.StandardButton.Yes:
+                    return
 
         # Disable buttons and reset progress
         self.activate_btn.setEnabled(False)
@@ -1843,7 +2001,19 @@ End of Report
         else:
             self.status_label.setText("❌ Activation Failed")
             self.status_label.setStyleSheet("QLabel#StatusLabel { color: #f38ba8; }")
-            QMessageBox.warning(self, "Activation Failed", message)
+
+            # Auto-handle admin privileges
+            if "access denied" in message.lower() or not self.is_admin():
+                reply = QMessageBox.question(self, "Admin Rights Required",
+                                           "Administrator privileges are required for Windows activation.\n\n"
+                                           "Would you like to restart the application with admin rights?",
+                                           QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+                if reply == QMessageBox.StandardButton.Yes:
+                    self.restart_as_admin()
+                else:
+                    QMessageBox.information(self, "Note", "You can manually restart as administrator later for full functionality.")
+            else:
+                QMessageBox.warning(self, "Activation Failed", message)
 
         self.log_message("═" * 60)
         self.log_message(f"🏁 Activation completed: {message}")
