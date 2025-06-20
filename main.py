@@ -434,6 +434,12 @@ class WindowsActivatorGUI(QMainWindow):
         self.activation_status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         status_layout.addWidget(self.activation_status_label)
 
+        # Add refresh button for activation status
+        refresh_status_btn = ModernButton("🔄 Refresh Status", "secondary")
+        refresh_status_btn.clicked.connect(self.check_activation_status_silent)
+        refresh_status_btn.setMaximumHeight(30)
+        status_layout.addWidget(refresh_status_btn)
+
         status_card = ModernCard("🔐 Activation Status", status_content)
         status_card.setObjectName("StatusCard")
 
@@ -1649,12 +1655,10 @@ End of Report
     def setup_system_info(self):
         """Setup comprehensive system information detection"""
         try:
-            # Get OS information
-            os_info = platform.system() + " " + platform.release()
-            self.os_label.setText(f"OS: {os_info}")
+            # Get detailed Windows version information
+            os_name, version_info, build_number = self.get_detailed_windows_info()
 
-            # Get version
-            version_info = platform.version()
+            self.os_label.setText(f"OS: {os_name}")
             self.version_label.setText(f"Version: {version_info}")
 
             # Get architecture
@@ -1829,29 +1833,64 @@ End of Report
     def check_activation_status_silent(self):
         """Check activation status without user interaction"""
         try:
-            result = subprocess.run("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /xpr",
-                                  shell=True, capture_output=True, text=True, timeout=10)
+            # Try multiple commands to get activation status
+            commands_and_indicators = [
+                ("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /xpr", ["permanently activated", "activated"]),
+                ("cscript //nologo C:\\Windows\\System32\\slmgr.vbs /dli", ["licensed", "activation status: active"]),
+            ]
 
-            if "permanently activated" in result.stdout.lower():
-                self.activation_status_label.setText("✅ Windows is Activated")
-                self.activation_status_label.setStyleSheet("""
-                    QLabel#ActivationStatus {
-                        color: #a6e3a1;
-                        background-color: rgba(166, 227, 161, 0.1);
-                        border: 2px solid #a6e3a1;
-                    }
-                """)
-            else:
-                self.activation_status_label.setText("❌ Windows Not Activated")
-                self.activation_status_label.setStyleSheet("""
-                    QLabel#ActivationStatus {
-                        color: #f38ba8;
-                        background-color: rgba(243, 139, 168, 0.1);
-                        border: 2px solid #f38ba8;
-                    }
-                """)
+            for command, indicators in commands_and_indicators:
+                try:
+                    result = subprocess.run(command, shell=True, capture_output=True,
+                                          text=True, timeout=15, creationflags=subprocess.CREATE_NO_WINDOW)
 
-        except Exception:
+                    output = (result.stdout + result.stderr).lower()
+                    self.log_message(f"🔍 Checking activation status...")
+                    self.log_message(f"Command: {command}")
+                    self.log_message(f"Output: {output[:200]}...")
+
+                    # Check for activation indicators
+                    for indicator in indicators:
+                        if indicator in output:
+                            self.activation_status_label.setText("✅ Windows is Activated")
+                            self.activation_status_label.setStyleSheet("""
+                                QLabel#ActivationStatus {
+                                    color: #a6e3a1;
+                                    background-color: rgba(166, 227, 161, 0.1);
+                                    border: 2px solid #a6e3a1;
+                                }
+                            """)
+                            self.log_message("✅ Windows activation status: ACTIVATED")
+                            return
+
+                    # Check for specific non-activation indicators
+                    non_activation_indicators = [
+                        "not activated", "unlicensed", "grace period",
+                        "trial", "evaluation", "not genuine"
+                    ]
+
+                    is_not_activated = any(indicator in output for indicator in non_activation_indicators)
+
+                    if is_not_activated:
+                        self.activation_status_label.setText("❌ Windows Not Activated")
+                        self.activation_status_label.setStyleSheet("""
+                            QLabel#ActivationStatus {
+                                color: #f38ba8;
+                                background-color: rgba(243, 139, 168, 0.1);
+                                border: 2px solid #f38ba8;
+                            }
+                        """)
+                        self.log_message("❌ Windows activation status: NOT ACTIVATED")
+                        return
+
+                except subprocess.TimeoutExpired:
+                    self.log_message("⚠️ Activation check timed out")
+                    continue
+                except Exception as e:
+                    self.log_message(f"⚠️ Error checking activation: {str(e)}")
+                    continue
+
+            # If we get here, status is unclear
             self.activation_status_label.setText("❓ Status Unknown")
             self.activation_status_label.setStyleSheet("""
                 QLabel#ActivationStatus {
@@ -1860,6 +1899,136 @@ End of Report
                     border: 2px solid #fab387;
                 }
             """)
+            self.log_message("❓ Could not determine activation status")
+
+        except Exception as e:
+            self.activation_status_label.setText("❓ Status Unknown")
+            self.activation_status_label.setStyleSheet("""
+                QLabel#ActivationStatus {
+                    color: #fab387;
+                    background-color: rgba(250, 179, 135, 0.1);
+                    border: 2px solid #fab387;
+                }
+            """)
+            self.log_message(f"❌ Exception checking activation status: {str(e)}")
+
+    def get_detailed_windows_info(self):
+        """Get detailed Windows version information with proper Windows 11 detection"""
+        try:
+            import winreg
+            import sys
+
+            # Get build number from registry for accurate detection
+            try:
+                key = winreg.OpenKey(winreg.HKEY_LOCAL_MACHINE,
+                                   r"SOFTWARE\Microsoft\Windows NT\CurrentVersion")
+
+                # Get current build number
+                current_build, _ = winreg.QueryValueEx(key, "CurrentBuild")
+                current_build = int(current_build)
+
+                # Get display version (like 21H2, 22H2, etc.)
+                try:
+                    display_version, _ = winreg.QueryValueEx(key, "DisplayVersion")
+                except FileNotFoundError:
+                    display_version = None
+
+                # Get UBR (Update Build Revision)
+                try:
+                    ubr, _ = winreg.QueryValueEx(key, "UBR")
+                    full_build = f"{current_build}.{ubr}"
+                except FileNotFoundError:
+                    full_build = str(current_build)
+
+                # Get product name
+                try:
+                    product_name, _ = winreg.QueryValueEx(key, "ProductName")
+                except FileNotFoundError:
+                    product_name = "Windows"
+
+                winreg.CloseKey(key)
+
+                # Determine Windows version based on build number
+                if current_build >= 22000:
+                    # Windows 11
+                    if current_build >= 26100:
+                        os_name = "Windows 11 24H2"
+                    elif current_build >= 22631:
+                        os_name = "Windows 11 23H2"
+                    elif current_build >= 22621:
+                        os_name = "Windows 11 22H2"
+                    elif current_build >= 22000:
+                        os_name = "Windows 11 21H2"
+                    else:
+                        os_name = "Windows 11"
+                elif current_build >= 10240:
+                    # Windows 10
+                    if current_build >= 19045:
+                        os_name = "Windows 10 22H2"
+                    elif current_build >= 19044:
+                        os_name = "Windows 10 21H2"
+                    elif current_build >= 19043:
+                        os_name = "Windows 10 21H1"
+                    elif current_build >= 19042:
+                        os_name = "Windows 10 20H2"
+                    elif current_build >= 19041:
+                        os_name = "Windows 10 2004"
+                    else:
+                        os_name = "Windows 10"
+                else:
+                    os_name = product_name
+
+                # Add edition info if available
+                if "pro" in product_name.lower():
+                    os_name += " Pro"
+                elif "home" in product_name.lower():
+                    os_name += " Home"
+                elif "enterprise" in product_name.lower():
+                    os_name += " Enterprise"
+                elif "education" in product_name.lower():
+                    os_name += " Education"
+
+                version_info = f"{platform.version().split('.')[0]}.0.{full_build}"
+
+                return os_name, version_info, current_build
+
+            except Exception as e:
+                # Fallback to platform detection
+                self.log_message(f"⚠️ Registry detection failed: {str(e)}")
+                return self.get_fallback_windows_info()
+
+        except Exception as e:
+            self.log_message(f"⚠️ Windows info detection failed: {str(e)}")
+            return self.get_fallback_windows_info()
+
+    def get_fallback_windows_info(self):
+        """Fallback method for Windows version detection"""
+        try:
+            # Use platform module as fallback
+            version = platform.version()
+            release = platform.release()
+
+            # Try to extract build number from version string
+            if "." in version:
+                parts = version.split(".")
+                if len(parts) >= 3:
+                    build_number = int(parts[2])
+
+                    # Determine OS based on build number
+                    if build_number >= 22000:
+                        os_name = f"Windows 11 (Build {build_number})"
+                    elif build_number >= 10240:
+                        os_name = f"Windows 10 (Build {build_number})"
+                    else:
+                        os_name = f"Windows {release}"
+
+                    return os_name, version, build_number
+
+            # Ultimate fallback
+            return f"Windows {release}", version, 0
+
+        except Exception:
+            return "Windows (Unknown)", "Unknown", 0
 
     def check_activation_status(self):
         """Check and display activation status"""
@@ -1996,8 +2165,8 @@ End of Report
             self.progress_bar.setValue(100)
             QMessageBox.information(self, "Success", message)
 
-            # Update activation status
-            self.check_activation_status_silent()
+            # Update activation status with a small delay
+            QTimer.singleShot(3000, self.check_activation_status_silent)  # 3 second delay
         else:
             self.status_label.setText("❌ Activation Failed")
             self.status_label.setStyleSheet("QLabel#StatusLabel { color: #f38ba8; }")
