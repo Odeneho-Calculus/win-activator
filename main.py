@@ -18,6 +18,7 @@ from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer, QPropertyAnimation, QR
 from PyQt5.QtGui import QFont, QPixmap, QPalette, QColor, QIcon
 import json
 import time
+import ctypes
 
 class ActivationWorker(QThread):
     """Worker thread for Windows activation process"""
@@ -98,6 +99,12 @@ class ActivationWorker(QThread):
             self.status_updated.emit("Starting activation process...")
             self.progress_updated.emit(10)
 
+            # Check if running as administrator
+            if not self.is_admin():
+                self.status_updated.emit("⚠️ WARNING: Not running as Administrator!")
+                self.status_updated.emit("For best results, restart this application as Administrator")
+                time.sleep(2)  # Give user time to read the warning
+
             # Clear existing keys
             self.status_updated.emit("Clearing existing product keys...")
             self.run_command("cscript //nologo slmgr.vbs /ckms")
@@ -131,18 +138,40 @@ class ActivationWorker(QThread):
     def install_product_key(self):
         """Install product key for selected Windows version"""
         if self.windows_version not in self.product_keys:
+            self.status_updated.emit("❌ Windows version not supported")
             return False
 
         keys = self.product_keys[self.windows_version]
-        for key in keys:
+        for i, key in enumerate(keys):
             if not self.is_running:
                 return False
             try:
+                self.status_updated.emit(f"🔑 Trying product key {i+1}/{len(keys)} for {self.windows_version}...")
                 result = self.run_command(f"cscript //nologo slmgr.vbs /ipk {key}")
-                if result and "successfully" in result.lower():
-                    return True
-            except:
+
+                if result:
+                    # Check for success indicators
+                    if "successfully" in result.lower() or "installed" in result.lower():
+                        self.status_updated.emit(f"✅ Product key installed successfully")
+                        return True
+                    elif "access denied" in result.lower():
+                        self.status_updated.emit("❌ Access denied - Please run as Administrator")
+                        return False
+                    elif "invalid" in result.lower():
+                        self.status_updated.emit(f"⚠️ Key {i+1} invalid, trying next...")
+                        continue
+                    else:
+                        self.status_updated.emit(f"⚠️ Key {i+1} failed: {result[:100]}...")
+                        continue
+                else:
+                    self.status_updated.emit(f"⚠️ No response for key {i+1}")
+                    continue
+
+            except Exception as e:
+                self.status_updated.emit(f"⚠️ Error with key {i+1}: {str(e)}")
                 continue
+
+        self.status_updated.emit("❌ All product keys failed")
         return False
 
     def activate_windows(self):
@@ -172,13 +201,29 @@ class ActivationWorker(QThread):
     def run_command(self, command):
         """Execute Windows command and return output"""
         try:
+            # For Windows commands, we might need to run with elevated privileges
             result = subprocess.run(command, shell=True, capture_output=True,
-                                  text=True, timeout=30)
-            return result.stdout + result.stderr
+                                  text=True, timeout=30, creationflags=subprocess.CREATE_NO_WINDOW)
+
+            output = result.stdout + result.stderr
+
+            # Log the command and its return code for debugging
+            if result.returncode != 0:
+                self.status_updated.emit(f"Command returned code {result.returncode}")
+
+            return output
+
         except subprocess.TimeoutExpired:
-            return "Command timed out"
+            return "Command timed out - operation took too long"
         except Exception as e:
-            return f"Command failed: {str(e)}"
+            return f"Command execution failed: {str(e)}"
+
+    def is_admin(self):
+        """Check if the application is running with administrator privileges"""
+        try:
+            return ctypes.windll.shell32.IsUserAnAdmin()
+        except:
+            return False
 
     def stop(self):
         """Stop the activation process"""
@@ -348,23 +393,27 @@ class WindowsActivatorGUI(QMainWindow):
         """Create tabbed interface for different features"""
         tab_widget = QTabWidget()
         tab_widget.setObjectName("ModernTabWidget")
+        tab_widget.setMinimumHeight(400)  # Ensure minimum height for proper display
 
         # Main Activation Tab
         main_tab = QWidget()
         main_layout = QVBoxLayout(main_tab)
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        main_layout.setSpacing(20)
+        main_layout.setContentsMargins(25, 25, 25, 25)
 
         # Windows Version Selection
         version_content = QWidget()
         version_layout = QVBoxLayout(version_content)
+        version_layout.setSpacing(12)
 
         instruction_label = QLabel("Select your Windows version:")
         instruction_label.setObjectName("InstructionLabel")
+        instruction_label.setWordWrap(True)
         version_layout.addWidget(instruction_label)
 
         self.version_combo = QComboBox()
         self.version_combo.setObjectName("VersionCombo")
+        self.version_combo.setMinimumHeight(40)
         self.version_combo.addItems([
             "Windows 11 Home",
             "Windows 11 Pro",
@@ -378,6 +427,7 @@ class WindowsActivatorGUI(QMainWindow):
         version_layout.addWidget(self.version_combo)
 
         auto_detect_btn = ModernButton("🔍 Auto-Detect Current Version", "secondary")
+        auto_detect_btn.setMinimumHeight(45)
         auto_detect_btn.clicked.connect(self.auto_detect_version)
         version_layout.addWidget(auto_detect_btn)
 
@@ -388,26 +438,37 @@ class WindowsActivatorGUI(QMainWindow):
         keys_info = self.create_keys_info_panel()
         main_layout.addWidget(keys_info)
 
+        # Add stretch to fill remaining space
+        main_layout.addStretch()
+
         tab_widget.addTab(main_tab, "🚀 Activation")
 
         # Tools Tab
         tools_tab = QWidget()
         tools_layout = QVBoxLayout(tools_tab)
-        tools_layout.setContentsMargins(20, 20, 20, 20)
+        tools_layout.setSpacing(20)
+        tools_layout.setContentsMargins(25, 25, 25, 25)
 
         # Add various tools
         self.create_tools_content(tools_layout)
 
-        tab_widget.addTab(tools_tab, "🛠️ Tools")
+        # Add stretch to fill remaining space
+        tools_layout.addStretch()
+
+        tab_widget.addTab(tools_tab, "🛠️ System Tools")
 
         # Information Tab
         info_tab = QWidget()
         info_layout = QVBoxLayout(info_tab)
-        info_layout.setContentsMargins(20, 20, 20, 20)
+        info_layout.setSpacing(20)
+        info_layout.setContentsMargins(25, 25, 25, 25)
 
         self.create_info_content(info_layout)
 
-        tab_widget.addTab(info_tab, "📖 Information")
+        # Add stretch to fill remaining space
+        info_layout.addStretch()
+
+        tab_widget.addTab(info_tab, "📖 Documentation")
 
         layout.addWidget(tab_widget)
 
@@ -441,6 +502,8 @@ class WindowsActivatorGUI(QMainWindow):
         """Create tools tab content"""
         # System Tools
         tools_grid = QGridLayout()
+        tools_grid.setSpacing(12)
+        tools_grid.setContentsMargins(10, 10, 10, 10)
 
         # Create tool buttons
         tools = [
@@ -456,13 +519,15 @@ class WindowsActivatorGUI(QMainWindow):
 
         for i, (text, func) in enumerate(tools):
             btn = ModernButton(text, "secondary")
+            btn.setMinimumHeight(50)
+            btn.setMinimumWidth(200)
             btn.clicked.connect(func)
             tools_grid.addWidget(btn, i // 2, i % 2)
 
         tools_widget = QWidget()
         tools_widget.setLayout(tools_grid)
 
-        tools_card = ModernCard("System Tools", tools_widget)
+        tools_card = ModernCard("🔧 System Management Tools", tools_widget)
         layout.addWidget(tools_card)
 
     def create_info_content(self, layout):
@@ -986,7 +1051,6 @@ class WindowsActivatorGUI(QMainWindow):
         QPushButton#ModernButton_primary:hover {
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                         stop:0 #b6f3b1, stop:1 #a4e3b2);
-            transform: translateY(-1px);
         }
 
         QPushButton#ModernButton_primary:pressed {
@@ -1140,6 +1204,7 @@ class WindowsActivatorGUI(QMainWindow):
             border-radius: 8px;
             background-color: #313244;
             margin-top: -2px;
+            padding: 5px;
         }
 
         QTabWidget::tab-bar {
@@ -1149,11 +1214,14 @@ class WindowsActivatorGUI(QMainWindow):
         QTabBar::tab {
             background-color: #45475a;
             color: #cdd6f4;
-            padding: 12px 20px;
-            margin-right: 2px;
+            padding: 15px 25px;
+            margin-right: 3px;
             border-top-left-radius: 8px;
             border-top-right-radius: 8px;
             font-weight: 500;
+            font-size: 12px;
+            min-width: 120px;
+            text-align: center;
         }
 
         QTabBar::tab:selected {
