@@ -1,0 +1,136 @@
+{
+    "application": {
+        "name": "Windows Activator Pro",
+        "version": "1.0.0",
+        "author": "Windows Activator Pro Team",
+        "description": "Modern GUI for Windows Activation"
+    },
+    "ui": {
+        "theme": "modern",
+        "window_size": {
+            "width": 800,
+            "height": 600,
+            "min_width": 700,
+            "min_height": 500
+        },
+        "colors": {
+            "primary": "#4CAF50",
+            "secondary": "#2196F3",
+            "success": "#27ae60",
+            "error": "#e74c3c",
+            "warning": "#f39c12",
+            "info": "#3498db"
+        },
+        "fonts": {
+            "main": "Segoe UI",
+            "monospace": "Consolas"
+        }
+    },
+    "activation": {
+        "timeout": 30,
+        "retry_attempts": 3,
+        "kms_servers": [
+            "kms7.MSGuides.com",
+            "kms8.MSGuides.com",
+            "kms9.MSGuides.com"
+        ],
+        "kms_port": 1688
+    },
+    "logging": {
+        "level": "INFO",
+        "max_lines": 1000,
+        "timestamp_format": "%H:%M:%S",
+        "enable_file_logging": false,
+        "log_file": "activator.log"
+    },
+    "security": {
+        "require_admin": true,
+        "verify_windows_version": true,
+        "show_warnings": true
+    },
+    "features": {
+        "auto_detect": true,
+        "system_info": true,
+        "progress_tracking": true,
+        "detailed_logging": true,
+        "status_checking": true
+    },
+    "windows_versions": {
+        "Windows 11 Home": {
+            "keys": [
+                "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99",
+                "3KHY7-WNT83-DGQKR-F7HPR-844BM",
+                "7HNRX-D7KGG-3K4RQ-4WPJ4-YTDFH",
+                "PVMJN-6DFY6-9CCP6-7BKTT-D3WVR"
+            ],
+            "detection_keywords": ["windows 11", "home"]
+        },
+        "Windows 11 Pro": {
+            "keys": [
+                "W269N-WFGWX-YVC9B-4J6C9-T83GX",
+                "MH37W-N47XK-V7XM9-C7227-GCQG9",
+                "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J",
+                "9FNHH-K3HBT-3W4TD-6383H-6XYWF",
+                "6TP4R-GNPTD-KYYHQ-7B7DP-J447Y",
+                "YVWGF-BXNMC-HTQYQ-CPQ99-66QFC"
+            ],
+            "detection_keywords": ["windows 11", "pro"]
+        },
+        "Windows 11 Enterprise": {
+            "keys": [
+                "NPPR9-FWDCX-D2C8J-H872K-2YT43",
+                "DPH2V-TTNVB-4X9Q3-TJR4H-KHJW4",
+                "YYVX9-NTFWV-6MDM3-9PT4T-4M68B",
+                "44RPN-FTY23-9VTTB-MP9BX-T84FV",
+                "WNMTR-4C88C-JK8YV-HQ7T2-76DF9",
+                "2F77B-TNFGY-69QQF-B8YKP-D69TJ",
+                "DCPHK-NFMTC-H88MJ-PFHPY-QJ4BJ",
+                "QFFDN-GRT3P-VKWWX-X7T3R-8B639",
+                "M7XTQ-FN8P6-TTKYV-9D4CC-J462D",
+                "92NFX-8DJQP-P6BBQ-THF9C-7CG2H"
+            ],
+            "detection_keywords": ["windows 11", "enterprise"]
+        },
+        "Windows 11 Education": {
+            "keys": [
+                "NW6C2-QMPVW-D7KKK-3GKT6-VCFB2",
+                "2WH4N-8QGBV-H22JP-CT43Q-MDWWJ"
+            ],
+            "detection_keywords": ["windows 11", "education"]
+        },
+        "Windows 10 Home": {
+            "keys": [
+                "TX9XD-98N7V-6WMQ6-BX7FG-H8Q99",
+                "3KHY7-WNT83-DGQKR-F7HPR-844BM",
+                "7HNRX-D7KGG-3K4RQ-4WPJ4-YTDFH",
+                "PVMJN-6DFY6-9CCP6-7BKTT-D3WVR"
+            ],
+            "detection_keywords": ["windows 10", "home"]
+        },
+        "Windows 10 Pro": {
+            "keys": [
+                "W269N-WFGWX-YVC9B-4J6C9-T83GX",
+                "MH37W-N47XK-V7XM9-C7227-GCQG9",
+                "NRG8B-VKK3Q-CXVCJ-9G2XF-6Q84J",
+                "9FNHH-K3HBT-3W4TD-6383H-6XYWF"
+            ],
+            "detection_keywords": ["windows 10", "pro"]
+        },
+        "Windows 10 Enterprise": {
+            "keys": [
+                "NPPR9-FWDCX-D2C8J-H872K-2YT43",
+                "DPH2V-TTNVB-4X9Q3-TJR4H-KHJW4",
+                "YYVX9-NTFWV-6MDM3-9PT4T-4M68B",
+                "44RPN-FTY23-9VTTB-MP9BX-T84FV"
+            ],
+            "detection_keywords": ["windows 10", "enterprise"]
+        },
+        "Windows 10 Education": {
+            "keys": [
+                "NW6C2-QMPVW-D7KKK-3GKT6-VCFB2",
+                "2WH4N-8QGBV-H22JP-CT43Q-MDWWJ"
+            ],
+            "detection_keywords": ["windows 10", "education"]
+        }
+    }
+}
